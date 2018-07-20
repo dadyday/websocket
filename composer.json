@@ -1,0 +1,19 @@
+{
+    "name": "dadyday/websocket",
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "Socket\\": "src/"
+        }
+    },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/heminei/php-websocket.git"
+        }
+    ],
+    "require": {
+        "hemiframe/php-websocket": "^1.5"
+    }
+}

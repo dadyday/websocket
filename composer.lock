@@ -1,0 +1,65 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "6743560856255f4e7e154a7a84ff0d2f",
+    "packages": [
+        {
+            "name": "hemiframe/php-websocket",
+            "version": "1.5.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/heminei/php-websocket.git",
+                "reference": "72ba4f6184bcf57acd32013fbb59c9601735719c"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/heminei/php-websocket/zipball/72ba4f6184bcf57acd32013fbb59c9601735719c",
+                "reference": "72ba4f6184bcf57acd32013fbb59c9601735719c",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "HemiFrame\\": "src/HemiFrame"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Martin",
+                    "email": "heminei@heminei.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "PHP WebSocket server and client library",
+            "keywords": [
+                "Client",
+                "PHP",
+                "Server",
+                "WebSocket",
+                "WebSockets"
+            ],
+            "support": {
+                "issues": "https://github.com/heminei/php-websocket/issues",
+                "source": "https://github.com/heminei/php-websocket/tree/1.5.3"
+            },
+            "time": "2018-07-04T19:46:30+00:00"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "dev",
+    "stability-flags": [],
+    "prefer-stable": true,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": []
+}
