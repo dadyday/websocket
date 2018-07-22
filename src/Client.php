@@ -4,43 +4,78 @@ namespace Socket;
 
 class Client extends Socket {
 
-	var
-		$id,
-		$socket,
-		$ip,
-		$port,
-		$handshake = false;
+    static function getSecWebsocketAccept($key) {
+        $salt = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+        $hash = sha1($key . $salt);
+        $hash = pack('H*', $hash);
+        return base64_encode($hash);
+    }
 
-	function __construct($socket) {
-		$this->id = uniqid("wsc");
-		$this->socket = $socket;
-		socket_getpeername($socket, $this->ip, $this->port);
-	}
+    var
+        $oServer,
+        $id,
+        $socket,
+        $ip,
+        $port,
+        $handshake = false;
 
-	function connect() {
-		$buffer = $this->read(2048);
-		echo $buffer;
+    function __construct(Server $oServer, $socket) {
+        $this->oServer = $oServer;
+        $this->id = uniqid("wsc");
+        $this->socket = $socket;
+        $this->getpeername($this->ip, $this->port);
+    }
 
-		if (preg_match("~GET (.*) HTTP~i", $buffer, $aMatch)) {
-			$this->path = $aMatch[1];
-		}
-		if (!preg_match("~^Sec-WebSocket-Key: (.*)$~im", $buffer, $aMatch)) {
-			return false;
-		}
+    function __destruct() {
+        $this->close();
+    }
 
-		$key = $aMatch[1];
-		$secAccept = base64_encode(pack('H*', sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
+    function connect() {
+        $buffer = $this->read(2048);
+        #echo $buffer;
 
-		$header =
-			"HTTP/1.1 101 Web Socket Protocol Handshake\r\n".
-			"Upgrade: websocket\r\n".
-			"Connection: Upgrade\r\n".
-			"Sec-WebSocket-Accept: $secAccept\r\n\r\n";
-		echo $header;
-		echo $this->write($header);
-		$this->handshake = true;
+        if (preg_match("~GET (.*) HTTP~i", $buffer, $aMatch)) {
+            $this->path = $aMatch[1];
+        }
+        if (!preg_match("~^Sec-WebSocket-Key:\s*(\S*)\s*$~im", $buffer, $aMatch)) {
+            return false;
+        }
+        $key = ($aMatch[1]);
+        $secAccept = static::getSecWebsocketAccept($key);
 
-		return true;
-	}
+        $header =
+            "HTTP/1.1 101 Web Socket Protocol Handshake\r\n".
+            "Upgrade: websocket\r\n".
+            "Connection: Upgrade\r\n".
+            "Sec-WebSocket-Accept: $secAccept\r\n\r\n";
+        #echo $header;
+        $this->write($header);
+        $this->handshake = true;
+
+        return true;
+    }
+
+    function disconnect($reason = 1000) {
+        $this->sendMessage(Message::close($reason));
+        return !!$this->oServer->removeClient($this->id);
+    }
+
+    function receiveMessage() {
+        $aRead = [$this->socket];
+        $this->select($aRead, $aWrite, $aExcept, 0, 10);
+        if (empty($aRead)) return false;
+
+        $buffer = $this->read(2048);
+
+        $oMessage = Message::fromBuffer($buffer);
+        $oMessage->oClient = $this;
+
+        return $oMessage;
+    }
+
+    function sendMessage(Message $oMessage) {
+        $buffer = $oMessage->toBuffer();
+        return $this->write($buffer);
+    }
 
 }

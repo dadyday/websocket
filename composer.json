@@ -7,13 +7,6 @@
             "Socket\\": "src/"
         }
     },
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/heminei/php-websocket.git"
-        }
-    ],
     "require": {
-        "hemiframe/php-websocket": "^1.5"
     }
 }
