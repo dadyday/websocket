@@ -1,82 +1,131 @@
 <?php
 namespace Socket;
 
-use Nette;
-
 class Server extends Socket {
 
-    use EventTrait;
+	use EventTrait;
 
-    var
-        $host,
-        $port,
-        $socket,
-        $aClient = [],
-        $autoAccept = false,
-        $onAccept = [],
-        $onConnect = [];
+	var
+		$host,
+		$port,
+		$socket,
+		$aClient = [],
+		$autoAccept = false,
+		$autoReceive = false,
+		$onAccept = [],
+		$onConnect = [],
+		$onDisconnect = [],
+		$onReceive = [],
+		$onSend = [];
 
-    function __construct($host, $port) {
-        $this->host = $host;
-        $this->port = $port;
-    }
+	function __construct($host, $port) {
+		parent::__construct();
+		$this->host = $host;
+		$this->port = $port;
+	}
 
-    function run() {
-        $this->socket = $this->create(AF_INET, SOCK_STREAM, SOL_TCP);
-        if (!$this->socket) return $this->error('socket create failed');
+	function run() {
+		$this->socket = $this->create(AF_INET, SOCK_STREAM, SOL_TCP);
+		if (!$this->socket) return $this->error('socket create failed');
 
-        $this->setOption(SOL_SOCKET, SO_REUSEADDR, 1);
-        $this->bind($this->host, $this->port);
-        $this->listen(0);
-        $this->setNonblock();
-    }
+		$this->setOption(SOL_SOCKET, SO_REUSEADDR, 1);
+		$this->bind($this->host, $this->port);
+		$this->listen(0);
+		#$this->setNonblock();
+	}
 
-    function waitClient($timeout = null) {
-        $end = microtime(true) + $timeout;
-        do {
-            if ($oClient = $this->acceptClient()) return $oClient;
-        }
-        while (is_null($timeout) || microtime(true) < $end);
-        return false;
-    }
+	function idle() {
+		if ($this->autoAccept) {
+			$this->autoAccept = false;
+			$this->acceptClient();
+			$this->autoAccept = true;
+		}
+		if ($this->autoReceive) {
+			$this->autoReceive = false;
+			$this->receiveMessage();
+			$this->autoReceive = true;
+		}
+	}
 
-    function acceptClient() {
-        $aRead = [$this->socket];
-        $this->select($aRead, $aWrite, $aExcept, 0, 10);
-        if (empty($aRead)) return false;
+	function waitClient($timeout = null) {
+		$end = microtime(true) + $timeout;
+		do {
+			if ($oClient = $this->acceptClient()) return $oClient;
+		}
+		while (is_null($timeout) || microtime(true) < $end);
+		return false;
+	}
 
-        $clSocket = $this->accept();
-        $oClient = new Client($this, $clSocket);
+	function acceptClient() {
+		$this->idle();
 
-        if (!$this->event('accept', $oClient)) return false;
+		$aRead = [$this->socket];
+		$this->select($aRead, $aWrite, $aExcept, 0, 10);
+		if (empty($aRead)) return false;
 
-        if (!$oClient->connect()) return false;
-        $this->aClient[$oClient->id] = $oClient;
+		$clSocket = $this->accept();
+		$oClient = new Client($this, $clSocket);
+		$oClient->setLogger($this->oLog);
 
-        return $oClient;
-    }
+		if (!$oClient->connect()) return false;
+		$this->aClient[$oClient->id] = $oClient;
 
-    function removeClient($id) {
-        if (!isset($this->aClient[$id])) return false;
-        $oClient = $this->aClient[$id];
-        unset($this->aClient[$id]);
-        return $oClient;
-    }
+		return $oClient;
+	}
 
-    function waitMessage($timeout = null) {
-        $end = microtime(true) + $timeout;
-        do {
-            if ($oMessage = $this->receiveMessage()) return $oMessage;
-        }
-        while (is_null($timeout) || microtime(true) < $end);
-        return false;
-    }
+	function removeClient($id) {
+		if (!isset($this->aClient[$id])) return false;
+		$oClient = $this->aClient[$id];
+		unset($this->aClient[$id]);
+		return $oClient;
+	}
 
-    function receiveMessage() {
-        if ($this->autoAccept) $this->acceptClient();
-        foreach ($this->aClient as $oClient) {
-            if ($oMessage = $oClient->receiveMessage()) return $oMessage;
-        }
-        return false;
-    }
+	function waitMessage($timeout = null) {
+		$end = microtime(true) + $timeout;
+		do {
+			if ($oMessage = $this->receiveMessage()) return $oMessage;
+		}
+		while (is_null($timeout) || microtime(true) < $end);
+		return false;
+	}
+
+	function receiveMessage() {
+		$this->idle();
+
+		foreach ($this->aClient as $oClient) {
+			if ($oMessage = $oClient->receiveMessage()) return $oMessage;
+		}
+		return false;
+	}
+
+	function receive($pattern = null) {
+		$oMessage = $this->receiveMessage();
+		if (!$oMessage || $oMessage->type != 'text') {
+			return false;
+		}
+		if (!is_null($pattern)) {
+			if (!preg_match('~^([/\~#%]).*(\1)[imsxu]*$~', $pattern)) {
+				$pattern = '~'.preg_quote($pattern).'~';
+			}
+			if (!preg_match($pattern, $oMessage->content)) {
+				return false;
+			};
+		}
+		return $oMessage->content;
+	}
+
+	function sendMessage(Message $oMessage) {
+		$this->idle();
+
+		$ok = false;
+		foreach ($this->aClient as $oClient) {
+			$ok |= $oClient->sendMessage($oMessage);
+		}
+		return $ok;
+	}
+
+	function send($message, $type = 'text') {
+		$oMessage = new Message($message, $type);
+		return $this->sendMessage($oMessage);
+	}
 }

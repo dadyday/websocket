@@ -3,27 +3,31 @@ namespace Socket;
 
 class Message {
 
-    static function close($statusCode) {
-        $code = pack('n', $statusCode);
-        return new static($code, 'close');
-    }
+	static function close($statusCode) {
+		$code = pack('n', $statusCode);
+		return new static($code, 'close');
+	}
 
-    static function fromBuffer($buffer) {
-        $data = Hybi10::decode($buffer);
-        return new static($data['payload'], $data['type']);
-    }
+	static function text($content) {
+		return new static($content, 'text');
+	}
 
-    var
-        $type,
-        $content,
-        $oClient;
+	static function fromBuffer($buffer) {
+		$data = Hybi10::decode($buffer);
+		return new static($data['payload'], $data['type']);
+	}
 
-    function __construct($content, $type = 'text') {
-        $this->type = $type;
-        $this->content = $content;
-    }
+	var
+		$type,
+		$content,
+		$oClient;
 
-    function toBuffer() {
-        return Hybi10::encode($this->content, $this->type);
-    }
+	function __construct($content, $type = 'text') {
+		$this->type = $type;
+		$this->content = $content;
+	}
+
+	function toBuffer() {
+		return Hybi10::encode($this->content, $this->type);
+	}
 }

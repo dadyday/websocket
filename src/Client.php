@@ -4,112 +4,133 @@ namespace Socket;
 
 class Client extends Socket {
 
-    use EventTrait;
+	use EventTrait;
 
-    static function getSecWebsocketAccept($key) {
-        $salt = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-        $hash = sha1($key . $salt);
-        $hash = pack('H*', $hash);
-        return base64_encode($hash);
-    }
+	static function getSecWebsocketAccept($key) {
+		$salt = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+		$hash = sha1($key . $salt);
+		$hash = pack('H*', $hash);
+		return base64_encode($hash);
+	}
 
-    static function parseHeader($header) {
-        $aTemp = explode("\r\n", $header);
-        $aEntry = [array_shift($aTemp)];
+	static function parseHeader($header) {
+		$aTemp = explode("\r\n", $header);
+		$aEntry = [array_shift($aTemp)];
 
-        foreach ($aTemp as $entry) {
-            if (!trim($entry)) continue;
-            if (preg_match('~^([\w-]+):\s*(\S*)\s*$~', $entry, $aMatch)) {
-                list(, $name, $value) = $aMatch;
-                $aEntry[$name] = $value;
-            }
-        }
-        return $aEntry;
-    }
+		foreach ($aTemp as $entry) {
+			if (!trim($entry)) continue;
+			if (preg_match('~^([\w-]+):\s*(\S*)\s*$~', $entry, $aMatch)) {
+				list(, $name, $value) = $aMatch;
+				$aEntry[$name] = $value;
+			}
+		}
+		return $aEntry;
+	}
 
-    static function buildHeader($aEntry) {
-        $first = array_shift($aEntry);
-        $ret = trim($first)."\r\n";
-        foreach ($aEntry as $name => $value) {
-            $ret .= "$name: ".trim($value)."\r\n";
-        }
-        return $ret."\r\n";
-    }
+	static function buildHeader($aEntry) {
+		$first = array_shift($aEntry);
+		$ret = trim($first)."\r\n";
+		foreach ($aEntry as $name => $value) {
+			$ret .= "$name: ".trim($value)."\r\n";
+		}
+		return $ret."\r\n";
+	}
 
-    var
-        $oServer,
-        $id,
-        $socket,
-        $ip,
-        $port,
-        $path,
-        $aHeader = [],
-        $handshake = false,
-        $onConnect = [];
+	var
+		$oServer,
+		$id,
+		$socket,
+		$ip,
+		$port,
+		$path,
+		$aHeader = [],
+		$handshake = false,
+		$onAccept = [],
+		$onConnect = [],
+		$onDisconnect = [],
+		$onReceive = [],
+		$onSend = [];
 
-    function __construct(Server $oServer, $socket) {
-        $this->oServer = $oServer;
-        $this->id = uniqid("wsc");
-        $this->socket = $socket;
-        $this->getpeername($this->ip, $this->port);
-    }
+	function __construct(Server $oServer, $socket) {
+		$this->oServer = $oServer;
+		$this->id = uniqid("wsc");
+		$this->socket = $socket;
 
-    function __destruct() {
-        $this->close();
-    }
+		$this->onAccept = $oServer->onAccept;
+		$this->onConnect = $oServer->onConnect;
+		$this->onDisconnect = $oServer->onDisconnect;
+		$this->onReceive = $oServer->onReceive;
+		$this->onSend = $oServer->onSend;
+	}
 
-    function connect() {
-        $buffer = $this->read(2048);
-        $this->aHeader = static::parseHeader($buffer);
+	function __destruct() {
+		$this->close();
+	}
 
-        if (preg_match("~GET (.*) HTTP~i", $this->aHeader[0], $aMatch)) {
-            $this->path = $aMatch[1];
-        }
+	function connect() {
+		$this->getpeername($this->ip, $this->port);
 
-        if (!isset($this->aHeader['Sec-WebSocket-Key'])) return false;
-        $key = $this->aHeader['Sec-WebSocket-Key'];
-        $secAccept = static::getSecWebsocketAccept($key);
+		$buffer = $this->read(2048);
+		$this->aHeader = static::parseHeader($buffer);
 
-        $aHeader = [
-            'HTTP/1.1 101 Web Socket Protocol Handshake',
-            'Upgrade' => 'websocket',
-            'Connection' => 'Upgrade',
-            'Sec-WebSocket-Accept' => $secAccept,
-        ];
+		if (preg_match("~GET (.*) HTTP~i", $this->aHeader[0], $aMatch)) {
+			$this->path = $aMatch[1];
+		}
 
-        if (!$this->oServer->event('connect', $this, $aHeader)) return false;
-        if (!$this->event('connect', $this, $aHeader)) return false;
+		if (!isset($this->aHeader['Sec-WebSocket-Key'])) return false;
+		$key = $this->aHeader['Sec-WebSocket-Key'];
+		$secAccept = static::getSecWebsocketAccept($key);
 
-        $header = static::buildHeader($aHeader);
+		$aHeader = [
+			'HTTP/1.1 101 Web Socket Protocol Handshake',
+			'Upgrade' => 'websocket',
+			'Connection' => 'Upgrade',
+			'Sec-WebSocket-Accept' => $secAccept,
+		];
 
-        #echo $header;
-        $this->write($header);
-        $this->handshake = true;
+		if (!$this->event('accept', $this, $aHeader)) return false;
 
-        return true;
-    }
+		$header = static::buildHeader($aHeader);
 
-    function disconnect($reason = 1000) {
-        $this->sendMessage(Message::close($reason));
-        return !!$this->oServer->removeClient($this->id);
-    }
+		#echo $header;
+		$this->write($header);
+		$this->handshake = true;
 
-    function receiveMessage() {
-        $aRead = [$this->socket];
-        $this->select($aRead, $aWrite, $aExcept, 0, 10);
-        if (empty($aRead)) return false;
+		if (!$this->event('connect', $this)) return false;
 
-        $buffer = $this->read(2048);
+		return true;
+	}
 
-        $oMessage = Message::fromBuffer($buffer);
-        $oMessage->oClient = $this;
+	function disconnect($reason = 1000) {
+		if (!$this->event('disconnect', $this)) return false;
 
-        return $oMessage;
-    }
+		$this->sendMessage(Message::close($reason));
+		return !!$this->oServer->removeClient($this->id);
+	}
 
-    function sendMessage(Message $oMessage) {
-        $buffer = $oMessage->toBuffer();
-        return $this->write($buffer);
-    }
+	function receiveMessage() {
+		$aRead = [$this->socket];
+		$this->select($aRead, $aWrite, $aExcept, 0, 10);
+		if (empty($aRead)) return false;
+
+		$buffer = $this->read(2048);
+
+		$oMessage = Message::fromBuffer($buffer);
+		$oMessage->oClient = $this;
+
+		$this->oLog->info('receive', [$oMessage->type, $oMessage->content, $oMessage->oClient->id]);
+		if (!$this->event('receive', $oMessage)) return false;
+
+		return $oMessage;
+	}
+
+	function sendMessage(Message $oMessage) {
+		$oMessage->oClient = $this;
+		$this->oLog->info('send', [$oMessage->type, $oMessage->content, $oMessage->oClient->id]);
+		if (!$this->event('send', $oMessage)) return false;
+
+		$buffer = $oMessage->toBuffer();
+		return $this->write($buffer);
+	}
 
 }

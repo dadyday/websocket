@@ -1,31 +1,31 @@
 <html>
 <body>
-    <pre id="chat"></pre>
-    <input onchange="conn.send(this.value)">
+	<pre id="chat"></pre>
+	<input onchange="conn.send(this.value)">
 
-    <script>
-        var conn;
-        function connect() {
-            conn = new WebSocket('ws://localhost:8001');
-            conn.onopen = function(e) {
-                console.log("Connection established!");
-                conn.send('hello');
-            };
+	<script>
+		var conn;
+		function connect() {
+			conn = new WebSocket('ws://localhost:8001');
+			conn.onopen = function(e) {
+				console.log("Connection established!");
+				conn.send('hello');
+			};
 
-            conn.onerror = function (error) {
-                console.log('WebSocket Error', error);
-            };
+			conn.onerror = function (error) {
+				console.log('WebSocket Error', error);
+			};
 
-            conn.onmessage = function(e) {
-                console.log(e.data);
-                document.getElementById('chat').innerHTML += e.data+"\n";
-            };
+			conn.onmessage = function(e) {
+				console.log(e.data);
+				document.getElementById('chat').innerHTML += e.data+"\n";
+			};
 
-            conn.onclose = function(e) {
-                console.log("Connection closed!");
-            };
-        };
-        connect();
-    </script>
+			conn.onclose = function(e) {
+				console.log("Connection closed!");
+			};
+		};
+		connect();
+	</script>
 </body>
 </html>
