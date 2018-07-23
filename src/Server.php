@@ -4,7 +4,8 @@ namespace Socket;
 use Nette;
 
 class Server extends Socket {
-    #use Nette\SmartObject;
+
+    use EventTrait;
 
     var
         $host,
@@ -12,22 +13,12 @@ class Server extends Socket {
         $socket,
         $aClient = [],
         $autoAccept = false,
-        $onAccept = [];
+        $onAccept = [],
+        $onConnect = [];
 
     function __construct($host, $port) {
         $this->host = $host;
         $this->port = $port;
-    }
-
-    function event($type, ...$aArg) {
-        $prop = 'on'.ucfirst($type);
-        array_unshift($aArg, $this);
-        foreach ($this->$prop as $listener) {
-            if (!is_callable($listener)) throw new \InvalidArgumentException("$prop must contain callables");
-            $ret = call_user_func_array($listener, $aArg);
-            if ($ret === false) return false;
-        }
-        return true;
     }
 
     function run() {
@@ -59,7 +50,7 @@ class Server extends Socket {
 
         if (!$this->event('accept', $oClient)) return false;
 
-        $oClient->connect();
+        if (!$oClient->connect()) return false;
         $this->aClient[$oClient->id] = $oClient;
 
         return $oClient;

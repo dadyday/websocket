@@ -4,11 +4,36 @@ namespace Socket;
 
 class Client extends Socket {
 
+    use EventTrait;
+
     static function getSecWebsocketAccept($key) {
         $salt = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
         $hash = sha1($key . $salt);
         $hash = pack('H*', $hash);
         return base64_encode($hash);
+    }
+
+    static function parseHeader($header) {
+        $aTemp = explode("\r\n", $header);
+        $aEntry = [array_shift($aTemp)];
+
+        foreach ($aTemp as $entry) {
+            if (!trim($entry)) continue;
+            if (preg_match('~^([\w-]+):\s*(\S*)\s*$~', $entry, $aMatch)) {
+                list(, $name, $value) = $aMatch;
+                $aEntry[$name] = $value;
+            }
+        }
+        return $aEntry;
+    }
+
+    static function buildHeader($aEntry) {
+        $first = array_shift($aEntry);
+        $ret = trim($first)."\r\n";
+        foreach ($aEntry as $name => $value) {
+            $ret .= "$name: ".trim($value)."\r\n";
+        }
+        return $ret."\r\n";
     }
 
     var
@@ -17,7 +42,10 @@ class Client extends Socket {
         $socket,
         $ip,
         $port,
-        $handshake = false;
+        $path,
+        $aHeader = [],
+        $handshake = false,
+        $onConnect = [];
 
     function __construct(Server $oServer, $socket) {
         $this->oServer = $oServer;
@@ -32,22 +60,28 @@ class Client extends Socket {
 
     function connect() {
         $buffer = $this->read(2048);
-        #echo $buffer;
+        $this->aHeader = static::parseHeader($buffer);
 
-        if (preg_match("~GET (.*) HTTP~i", $buffer, $aMatch)) {
+        if (preg_match("~GET (.*) HTTP~i", $this->aHeader[0], $aMatch)) {
             $this->path = $aMatch[1];
         }
-        if (!preg_match("~^Sec-WebSocket-Key:\s*(\S*)\s*$~im", $buffer, $aMatch)) {
-            return false;
-        }
-        $key = ($aMatch[1]);
+
+        if (!isset($this->aHeader['Sec-WebSocket-Key'])) return false;
+        $key = $this->aHeader['Sec-WebSocket-Key'];
         $secAccept = static::getSecWebsocketAccept($key);
 
-        $header =
-            "HTTP/1.1 101 Web Socket Protocol Handshake\r\n".
-            "Upgrade: websocket\r\n".
-            "Connection: Upgrade\r\n".
-            "Sec-WebSocket-Accept: $secAccept\r\n\r\n";
+        $aHeader = [
+            'HTTP/1.1 101 Web Socket Protocol Handshake',
+            'Upgrade' => 'websocket',
+            'Connection' => 'Upgrade',
+            'Sec-WebSocket-Accept' => $secAccept,
+        ];
+
+        if (!$this->oServer->event('connect', $this, $aHeader)) return false;
+        if (!$this->event('connect', $this, $aHeader)) return false;
+
+        $header = static::buildHeader($aHeader);
+
         #echo $header;
         $this->write($header);
         $this->handshake = true;

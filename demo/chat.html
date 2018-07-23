@@ -9,7 +9,7 @@
             conn = new WebSocket('ws://localhost:8001');
             conn.onopen = function(e) {
                 console.log("Connection established!");
-                conn.send('bin da');
+                conn.send('hello');
             };
 
             conn.onerror = function (error) {

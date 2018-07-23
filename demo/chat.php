@@ -11,6 +11,9 @@ $oServer->onAccept[] = function($oSrv, $oCl) {
 $oCl = $oServer->waitClient(2);
 
 $oServer->autoAccept = true;
+$oServer->onAccept[] = function($oSrv, $oCl) {
+    #return false;
+};
 
 while (true) {
     $oMsg = $oServer->waitMessage(10);
