@@ -34,6 +34,11 @@ class Server extends Socket {
 		#$this->setNonblock();
 	}
 
+	function close() {
+		foreach($this->aClient as $oClient) $oClient->close();
+		$this->close();
+	}
+
 	function idle() {
 		if ($this->autoAccept) {
 			$this->autoAccept = false;
